@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Causality Concepts Discussion Wall</title>
+    <style>
+        * { box-sizing: border-box; font-family: 'Segoe UI', sans-serif; }
+        body { max-width: 1000px; margin: 0 auto; padding: 20px; background: #f5f9ff; }
+        .header { background: linear-gradient(135deg, #4a6fa5, #2c3e50); color: white; padding: 25px; border-radius: 10px; margin-bottom: 25px; }
+        .post-form, .wall-container { background: white; padding: 25px; border-radius: 10px; margin-bottom: 30px; box-shadow: 0 3px 10px rgba(0,0,0,0.08); }
+        .form-group { margin-bottom: 15px; }
+        input, select, textarea { width: 100%; padding: 12px; border: 2px solid #e1e8ed; border-radius: 6px; font-size: 16px; }
+        textarea { height: 120px; resize: vertical; }
+        button { background: #4a6fa5; color: white; border: none; padding: 14px 30px; border-radius: 6px; font-size: 16px; width: 100%; cursor: pointer; }
+        .post { border-left: 5px solid #4a6fa5; padding: 20px; margin-bottom: 20px; background: #f8fafd; border-radius: 0 8px 8px 0; }
+        .post.concept { border-left-color: #2ecc71; }
+        .post.question { border-left-color: #e74c3c; }
+        .post.example { border-left-color: #f39c12; }
+        .post.answer { border-left-color: #9b59b6; }
+        .post-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+        .filter-buttons { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
+        .filter-btn { background: #e1e8ed; border: none; padding: 8px 16px; border-radius: 20px; cursor: pointer; }
+        .filter-btn.active { background: #4a6fa5; color: white; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>📚 Causality and Causal Inferences Discussion Wall</h1>
+        <p>Collaborate with classmates to discuss causality concepts from both Pearl's and Rubin's perspectives</p>
+    </div>
+
+ <div class="instructions">
+        <strong>How to use:</strong> 
+        1. Select post type → 2. Enter your name and content → 3. Click "Post to Wall" → 
+        4. See real-time updates from classmates!
+    </div>
+    
+    <div class="post-form">
+        <h2>Add to Discussion</h2>
+        <form id="postForm">
+            <div class="form-group">
+                <label>Discussion Type:</label>
+                <select id="type" required>
+                    <option value="concept">📖 Concept Explanation</option>
+                    <option value="question">❓ Question</option>
+                    <option value="example">💡 Real-World Example</option>
+                    <option value="answer">✅ Answer/Insight</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Your Name:</label>
+                <input type="text" id="name" placeholder="Enter your name" required>
+            </div>
+            <div class="form-group">
+                <label>Your Contribution:</label>
+                <textarea id="content" placeholder="Share your thoughts, questions, or examples..." required></textarea>
+            </div>
+            <div class="form-group">
+                <label>Related Concept (optional):</label>
+                <input type="text" id="concept" placeholder="e.g., Potential Outcomes, DAGs, Propensity Score">
+            </div>
+            <button type="submit">📌 Post to Discussion Wall</button>
+        </form>
+    </div>
+    
+    <div class="wall-container">
+        <h2>Live Discussion Wall</h2>
+        <div class="filter-buttons">
+            <button class="filter-btn active" data-type="all">All Posts</button>
+            <button class="filter-btn" data-type="concept">Concepts</button>
+            <button class="filter-btn" data-type="question">Questions</button>
+            <button class="filter-btn" data-type="example">Examples</button>
+            <button class="filter-btn" data-type="answer">Answers</button>
+        </div>
+        <div id="wall">
+            <div style="text-align: center; padding: 40px; color: #7f8c8d;">
+                <p>Loading discussion posts...</p>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
+
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyA5nmZAE6ecLVjIa5Tb9be40JMb3e-Zv4o",
+            authDomain: "causal-inferences.firebaseapp.com",
+            projectId: "causal-inferences",
+            storageBucket: "causal-inferences.firebasestorage.app",
+            messagingSenderId: "163674676698",
+            appId: "1:163674676698:web:0e18c632923a2b338574e3",
+            measurementId: "G-G56P4Q42X8"
+        };
+
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+        
+        const postForm = document.getElementById('postForm');
+        const wall = document.getElementById('wall');
+        const filterBtns = document.querySelectorAll('.filter-btn');
+        let currentFilter = 'all';
+
+        function formatTime(timestamp) {
+            if (!timestamp) return 'Just now';
+            try {
+                const date = timestamp.toDate();
+                return date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) + ' • ' + date.toLocaleDateString();
+            } catch (e) {
+                return 'Recent';
+            }
+        }
+
+        function createPostElement(post) {
+            const typeIcons = { concept: '📖', question: '❓', example: '💡', answer: '✅' };
+            const typeNames = { concept: 'Concept', question: 'Question', example: 'Example', answer: 'Answer' };
+            
+            return `
+                <div class="post ${post.type}" data-type="${post.type}">
+                    <div class="post-header">
+                        <div style="font-weight: bold; font-size: 18px;">${typeIcons[post.type] || '📌'} ${post.name}</div>
+                        <div style="background: #e1e8ed; padding: 4px 12px; border-radius: 20px; font-size: 14px;">${typeNames[post.type] || post.type}</div>
+                    </div>
+                    ${post.concept ? `<div style="margin: 5px 0;"><strong>Concept:</strong> ${post.concept}</div>` : ''}
+                    <div style="margin: 15px 0; line-height: 1.6;">${post.content.replace(/\n/g, '<br>')}</div>
+                    <div style="font-size: 12px; color: #7f8c8d; text-align: right;">Posted: ${formatTime(post.timestamp)}</div>
+                </div>
+            `;
+        }
+
+        function loadPosts() {
+            db.collection("posts").orderBy("timestamp", "desc").onSnapshot((snapshot) => {
+                if (snapshot.empty) {
+                    wall.innerHTML = `<div style="text-align: center; padding: 40px; color: #7f8c8d;"><p>No posts yet. Be the first to contribute!</p></div>`;
+                    return;
+                }
+                
+                let postsHTML = '';
+                snapshot.forEach(doc => {
+                    const post = doc.data();
+                    if (currentFilter === 'all' || post.type === currentFilter) {
+                        postsHTML += createPostElement(post);
+                    }
+                });
+                
+                if (!postsHTML && currentFilter !== 'all') {
+                    postsHTML = `<div style="text-align: center; padding: 40px; color: #7f8c8d;"><p>No ${currentFilter} posts yet.</p></div>`;
+                }
+                
+                wall.innerHTML = postsHTML;
+            });
+        }
+
+        loadPosts();
+
+        postForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const submitBtn = postForm.querySelector('button');
+            submitBtn.textContent = 'Posting...';
+            submitBtn.disabled = true;
+            
+            try {
+                await db.collection("posts").add({
+                    name: document.getElementById('name').value.trim(),
+                    type: document.getElementById('type').value,
+                    content: document.getElementById('content').value.trim(),
+                    concept: document.getElementById('concept').value.trim() || '',
+                    timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                });
+                
+                document.getElementById('content').value = '';
+                document.getElementById('concept').value = '';
+                alert('✓ Posted successfully!');
+            } catch (error) {
+                alert("Error posting: " + error.message);
+            } finally {
+                submitBtn.textContent = '📌 Post to Discussion Wall';
+                submitBtn.disabled = false;
+            }
+        });
+
+        filterBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                filterBtns.forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                currentFilter = btn.dataset.type;
+                loadPosts();
+            });
+        });
+    </script>
+</body>
+</html>
